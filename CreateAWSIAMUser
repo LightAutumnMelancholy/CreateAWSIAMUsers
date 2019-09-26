@@ -1,0 +1,69 @@
+#!/bin/bash
+
+while getopts "p:u:P:g:h" arg; do
+    case $arg in
+        p)
+          profileName=${OPTARG}
+          ;;
+        u)
+          userToCreate=${OPTARG}
+          ;;
+        P)
+          initialPassword=${OPTARG}
+          ;;
+        g)
+          groupPrimary=${OPTARG}
+          ;;
+        h)
+          cat <<- EOF
+          [HELP]: ### CreateAWSCLIUsers: Create users on the fly with credentials. ###
+		   
+          [EXAMPLE]: scriptname -p <amazon_profile> -P S0m3L@m3P@Ssw0rD - u someusernamehere -g DevelopmentUsers
+          
+          [REQUIREMENTS]: This script requires only three arguments -p, -u and -P, and requires the user to have setup aws profiles setup in
+		  order to use this tool.
+		  
+         [REQUIRED ARGUMENTS]:
+            -P) [initialPassword] [STRING] This option refers to the initial user password. This supports single quoted strings for funky passwords that would otherwise glob.
+            -p) [profile] [STRING] This option refers to the profile to be used for AWS. This should exist in $HOME/.aws/credentials.
+		    -u  [user] [STRING] This is the username that you are creating.
+            -g  [groups] [STRING || IFS seperated string] This function is serviced via 'for'. You can provide an item, like groupname1, or an IFS seperated and quoted string for
+                                                          Multiple groups. 'groupname1 groupname2'
+         [OPTIONAL ARGUMENTS]:
+            -h) [HELP] [takes no arguements] Print this dialog to the screen.
+EOF
+         exit 0
+         ;;
+      *)
+         printf "%s\n" "Incorrect syntax, try -h for help"
+         exit 0
+         ;;
+    esac
+done
+
+trap ctrl_c INT
+
+function ctrl_c() {
+        echo "** Caught SIGINT: CTRL-C **"
+        exit 1
+}
+
+function create_user() {
+
+  if [[ -n $userToCreate ]] && [[ -n $profileName ]] && [[ -n $initialPassword ]] && [[ -n $groupPrimary ]]
+      then
+          aws iam create-user --user-name $userToCreate --profile $profileName && \
+          printf "%s\n" "[INFO]: User added to ${profileName} as ${userToCreate} with success." || printf "[ERROR]: Failed to create user, do you have permissions?" && \
+          aws iam create-login-profile --user-name $userToCreate --password $initialPassword --password-reset-required --profile $profileName && \
+          printf "%s\n" "[INFO]: User login profile created with success." || printf "[ERROR]: Failed to create login profile, do you have permissions?" && \
+          for groups in ${groupPrimary}
+             do aws iam add-user-to-group --user-name $userToCreate --group-name $groups --profile $profileName && \
+             printf "%s\n" "[INFO]: User added to group ${groups} with success." || printf "[ERROR]: Failed to add user to group, do you have permissions?"
+          done
+      else
+          printf "%s\n" "[ERROR]: One or more unset variables required, pleased use -h for help"
+  fi
+
+}
+
+create_user
